@@ -1,6 +1,6 @@
 import swaggerJSDoc from "swagger-jsdoc";
 
-const BASE_URL = process.env.BASE_URL || "http://localhost:4000";
+const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 
 const swaggerDefinition = {
   openapi: "3.0.0",
