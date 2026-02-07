@@ -1,5 +1,7 @@
 import swaggerJSDoc from "swagger-jsdoc";
 
+const BASE_URL = process.env.BASE_URL || "http://localhost:4000";
+
 const swaggerDefinition = {
   openapi: "3.0.0",
   info: {
@@ -9,15 +11,18 @@ const swaggerDefinition = {
   },
   servers: [
     {
-      url: "http://localhost:4000",
-      description: "Local server",
+      url: BASE_URL,
+      description:
+        process.env.NODE_ENV === "production"
+          ? "Production server"
+          : "Local server",
     },
   ],
 };
 
 const options = {
   swaggerDefinition,
-  apis: ["./src/modules/**/*.ts"], // scan controllers & routes
+  apis: ["./src/modules/**/*.ts"],
 };
 
 export const swaggerSpec = swaggerJSDoc(options);
