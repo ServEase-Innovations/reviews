@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import prisma from "../../utils/prisma";
-import { Prisma } from "@prisma/client";
 
 export const checkReviewEligibility = async (req: Request, res: Response) => {
   const { engagementId } = req.query;
@@ -277,70 +276,92 @@ export const getProviderReviews = async (req: Request, res: Response) => {
 
   try {
     /* ---------- dynamic filters ---------- */
-    const filters: Prisma.Sql[] = [
-      Prisma.sql`pr.serviceproviderid = ${serviceProviderId}`,
-    ];
+    const where: string[] = [];
+const params: any[] = [];
 
-    if (minRating !== null) {
-      filters.push(Prisma.sql`pr.rating >= ${minRating}`);
-    }
+// required
+where.push(`pr.serviceproviderid = $${params.length + 1}`);
+params.push(serviceProviderId);
 
-    if (serviceType) {
-      filters.push(Prisma.sql`pr.service_type = ${serviceType}`);
-    }
+// optional filters
+if (minRating) {
+  where.push(`pr.rating >= $${params.length + 1}`);
+  params.push(minRating);
+}
 
-    const whereClause = Prisma.sql`
-      WHERE ${Prisma.join(filters, " AND ")}
-    `;
+if (serviceType) {
+  where.push(`pr.service_type = $${params.length + 1}`);
+  params.push(serviceType);
+}
+
+const whereClause =
+  where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+
 
     /* ---------- reviews ---------- */
-    const reviews = await prisma.$queryRaw<
-      {
-        review_id: number;
-        rating: number;
-        review: string | null;
-        service_type: string;
-        created_at: number;
-      }[]
-    >(Prisma.sql`
-      SELECT
-        pr.review_id::int        AS review_id,
-        pr.rating               AS rating,
-        pr.review               AS review,
-        pr.service_type         AS service_type,
-        FLOOR(EXTRACT(EPOCH FROM pr.created_at))::int AS created_at
-      FROM provider_reviews pr
-      ${whereClause}
-      ORDER BY pr.created_at DESC
-      LIMIT ${Prisma.raw(String(limit))}
-      OFFSET ${Prisma.raw(String(offset))}
-    `);
+    const reviews = await prisma.$queryRawUnsafe<
+  {
+    review_id: number;
+    rating: number;
+    review: string | null;
+    service_type: string;
+    created_at: number;
+  }[]
+>(`
+  SELECT
+    pr.review_id::int,
+    pr.rating,
+    pr.review,
+    pr.service_type,
+    FLOOR(EXTRACT(EPOCH FROM pr.created_at))::int AS created_at
+  FROM provider_reviews pr
+  ${whereClause}
+  ORDER BY pr.created_at DESC
+  LIMIT ${limit}
+  OFFSET ${offset}
+`, ...params);
+
 
     /* ---------- provider summary (NOT paginated) ---------- */
-    const [summary] = await prisma.$queryRaw<
-      {
-        total: number;
-        avg_rating: number | null;
-        r5: number;
-        r4: number;
-        r3: number;
-        r2: number;
-        r1: number;
-        low_ratings: number;
-      }[]
-    >(Prisma.sql`
-      SELECT
-        COUNT(*)::int                              AS total,
-        ROUND(AVG(rating)::numeric, 1)            AS avg_rating,
-        COUNT(*) FILTER (WHERE rating = 5)::int   AS r5,
-        COUNT(*) FILTER (WHERE rating = 4)::int   AS r4,
-        COUNT(*) FILTER (WHERE rating = 3)::int   AS r3,
-        COUNT(*) FILTER (WHERE rating = 2)::int   AS r2,
-        COUNT(*) FILTER (WHERE rating = 1)::int   AS r1,
-        COUNT(*) FILTER (WHERE rating <= 2)::int  AS low_ratings
-      FROM provider_reviews pr
-      WHERE pr.serviceproviderid = ${serviceProviderId}
-    `);
+    const summaryRows = await prisma.$queryRawUnsafe<
+  {
+    total: number;
+    avg_rating: number | null;
+    r5: number;
+    r4: number;
+    r3: number;
+    r2: number;
+    r1: number;
+    low_ratings: number;
+  }[]
+>(
+  `
+  SELECT
+    COUNT(*)::int                              AS total,
+    ROUND(AVG(rating)::numeric, 1)             AS avg_rating,
+    COUNT(*) FILTER (WHERE rating = 5)::int    AS r5,
+    COUNT(*) FILTER (WHERE rating = 4)::int    AS r4,
+    COUNT(*) FILTER (WHERE rating = 3)::int    AS r3,
+    COUNT(*) FILTER (WHERE rating = 2)::int    AS r2,
+    COUNT(*) FILTER (WHERE rating = 1)::int    AS r1,
+    COUNT(*) FILTER (WHERE rating <= 2)::int   AS low_ratings
+  FROM provider_reviews pr
+  WHERE pr.serviceproviderid = $1
+  `,
+  serviceProviderId
+);
+
+const summary = summaryRows[0] ?? {
+  total: 0,
+  avg_rating: null,
+  r5: 0,
+  r4: 0,
+  r3: 0,
+  r2: 0,
+  r1: 0,
+  low_ratings: 0,
+};
+
 
     const total = summary?.total ?? 0;
     const avg = summary?.avg_rating ?? 0;
