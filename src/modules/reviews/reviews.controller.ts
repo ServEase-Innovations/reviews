@@ -28,11 +28,7 @@ async function findExistingReviewId(
   engagementId: number
 ): Promise<bigint | null> {
   const rows = await prisma.$queryRaw<{ review_id: bigint }[]>`
-    SELECT review_id
-    FROM provider_reviews
-    WHERE engagement_id = ${engagementId}
-       OR serviceprovider_engagement_id = ${engagementId}
-    LIMIT 1
+    SELECT review_id FROM provider_reviews WHERE engagement_id = ${engagementId} LIMIT 1
   `;
   return rows.length ? rows[0].review_id : null;
 }
