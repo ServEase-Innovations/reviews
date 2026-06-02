@@ -48,11 +48,26 @@ function normalizeServiceType(bookingType: string, serviceType?: string | null):
   return "ON_DEMAND";
 }
 
-export const checkReviewEligibility = async (req: Request, res: Response) => {
-  const engagementId = Number(req.query.engagementId);
-  const customerId = req.query.customerId ? Number(req.query.customerId) : null;
+function parsePositiveInt(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
 
-  if (!Number.isFinite(engagementId) || engagementId < 1) {
+function parseMaybeInt(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.floor(n) : null;
+}
+
+export const checkReviewEligibility = async (req: Request, res: Response) => {
+  const engagementId = parsePositiveInt(
+    req.query.engagementId ?? req.query.engagement_id
+  );
+  const customerId = parseMaybeInt(
+    req.query.customerId ?? req.query.customer_id
+  );
+
+  if (engagementId == null) {
     return res.status(400).json({
       eligible: false,
       reason: "MISSING_ENGAGEMENT_ID",
@@ -153,13 +168,15 @@ export const checkReviewEligibility = async (req: Request, res: Response) => {
 };
 
 export const createReview = async (req: Request, res: Response) => {
-  const engagementId = Number(req.body.engagementId);
-  const customerId = req.body.customerId != null ? Number(req.body.customerId) : null;
+  const engagementId = parsePositiveInt(
+    req.body.engagementId ?? req.body.engagement_id
+  );
+  const customerId = parseMaybeInt(req.body.customerId ?? req.body.customer_id);
   const rating = Number(req.body.rating);
   const reviewText =
     typeof req.body.review === "string" ? req.body.review.trim() : null;
 
-  if (!Number.isFinite(engagementId) || engagementId < 1 || !Number.isFinite(rating)) {
+  if (engagementId == null || !Number.isFinite(rating)) {
     return res.status(400).json({
       success: false,
       reason: "MISSING_REQUIRED_FIELDS",
@@ -489,6 +506,7 @@ export const getProviderReviews = async (req: Request, res: Response) => {
         customerid: r.customerid,
         customer_name: r.customer_name,
         created_at: r.created_at,
+        created_at_epoch: r.created_at,
       })),
     });
   } catch (err) {
