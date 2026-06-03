@@ -1,0 +1,24 @@
+# Run this workflow in the reviews repo (ServEase-Innovations/reviews).
+# On push to main, triggers the Render deploy hook — same effect as Manual Deploy in Render.
+#
+# Setup (reviews repo → Settings → Secrets → Actions):
+#   RENDER_DEPLOY_HOOK = full URL from Render → reviews service → Settings → Deploy Hook
+
+name: Trigger Render deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        run: |
+          if [[ -z "${{ secrets.RENDER_DEPLOY_HOOK }}" ]]; then
+            echo "::error::Add RENDER_DEPLOY_HOOK secret in the reviews repo (Render → Deploy Hook URL)."
+            exit 1
+          fi
+          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          echo "Render deploy hook triggered."

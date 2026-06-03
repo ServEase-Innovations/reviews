@@ -4,6 +4,8 @@ Lightweight API for review eligibility checks, creating provider reviews, and li
 
 ## Render (dev)
 
+**GitHub → Render:** Pushes to this repo (`main`) should trigger a deploy. Add workflow `.github/workflows/trigger-render-deploy.yml` and secret `RENDER_DEPLOY_HOOK` in **this** repo (see monorepo `docs/DEPLOYMENT.md`). Manual Deploy in Render works the same way.
+
 | Setting | Value |
 |---------|--------|
 | **Root Directory** | `.` (repo root — where `package.json` is). **Not** `src`. |
