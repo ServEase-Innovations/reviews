@@ -5,7 +5,9 @@
   "scripts": {
     "build": "prisma generate && tsc",
     "start": "node dist/server.js",
-    "dev": "nodemon --ext ts,json,js,prisma --ignore node_modules --ignore dist --ignore prisma/migrations -w src -w prisma/schema.prisma -x tsx src/server.ts"
+    "dev": "nodemon --ext ts,json,js,prisma --ignore node_modules --ignore dist --ignore prisma/migrations -w src -w prisma/schema.prisma -x tsx src/server.ts",
+    "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate"
   },
   "keywords": [],
   "author": "",
