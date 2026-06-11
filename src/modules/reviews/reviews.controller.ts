@@ -59,6 +59,49 @@ function parseMaybeInt(value: unknown): number | null {
   return Number.isFinite(n) ? Math.floor(n) : null;
 }
 
+type EngagementCompletionRow = {
+  booking_type: string;
+  active: boolean | null;
+  engagement_status: string | null;
+  task_status: string | null;
+};
+
+function isLifecycleCompleted(
+  engagementStatus: string | null | undefined,
+  taskStatus: string | null | undefined
+): boolean {
+  const life = String(engagementStatus ?? "").toUpperCase();
+  const task = String(taskStatus ?? "").toUpperCase();
+  return life === "COMPLETED" || task === "COMPLETED";
+}
+
+async function hasCompletedServiceDay(engagementId: number): Promise<boolean> {
+  const rows = await prisma.$queryRaw<{ status: string }[]>`
+    SELECT status
+    FROM service_days
+    WHERE engagement_id = ${engagementId}
+      AND UPPER(COALESCE(status, '')) IN ('COMPLETED', 'DONE')
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
+async function isEngagementCompletedForReview(
+  row: EngagementCompletionRow,
+  engagementId: number
+): Promise<boolean> {
+  if (isLifecycleCompleted(row.engagement_status, row.task_status)) {
+    return true;
+  }
+
+  const bookingType = String(row.booking_type || "").toUpperCase();
+  if (bookingType === "ON_DEMAND") {
+    return hasCompletedServiceDay(engagementId);
+  }
+
+  return row.active !== true;
+}
+
 export const checkReviewEligibility = async (req: Request, res: Response) => {
   const engagementId = parsePositiveInt(
     req.query.engagementId ?? req.query.engagement_id
@@ -84,6 +127,8 @@ export const checkReviewEligibility = async (req: Request, res: Response) => {
         booking_type: string;
         active: boolean | null;
         assignment_status: string | null;
+        engagement_status: string | null;
+        task_status: string | null;
       }[]
     >`
       SELECT
@@ -92,7 +137,9 @@ export const checkReviewEligibility = async (req: Request, res: Response) => {
         e.serviceproviderid,
         e.booking_type,
         e.active,
-        e.assignment_status
+        e.assignment_status,
+        e.engagement_status,
+        e.task_status
       FROM engagements e
       WHERE e.engagement_id = ${engagementId}
       LIMIT 1
@@ -121,22 +168,7 @@ export const checkReviewEligibility = async (req: Request, res: Response) => {
       });
     }
 
-    if (row.booking_type === "ON_DEMAND") {
-      const completedDay = await prisma.$queryRaw<{ status: string }[]>`
-        SELECT status
-        FROM service_days
-        WHERE engagement_id = ${engagementId}
-          AND status = 'COMPLETED'
-        LIMIT 1
-      `;
-
-      if (!completedDay.length) {
-        return res.json({
-          eligible: false,
-          reason: "ENGAGEMENT_NOT_COMPLETED",
-        });
-      }
-    } else if (row.active === true) {
+    if (!(await isEngagementCompletedForReview(row, engagementId))) {
       return res.json({
         eligible: false,
         reason: "ENGAGEMENT_NOT_COMPLETED",
@@ -207,6 +239,8 @@ export const createReview = async (req: Request, res: Response) => {
         booking_type: string;
         service_type: string | null;
         active: boolean | null;
+        engagement_status: string | null;
+        task_status: string | null;
       }[]
     >`
       SELECT
@@ -215,7 +249,9 @@ export const createReview = async (req: Request, res: Response) => {
         serviceproviderid,
         booking_type,
         service_type,
-        active
+        active,
+        engagement_status,
+        task_status
       FROM engagements
       WHERE engagement_id = ${engagementId}
     `;
@@ -243,25 +279,13 @@ export const createReview = async (req: Request, res: Response) => {
       });
     }
 
-    if (engagement.booking_type === "ON_DEMAND") {
-      const completedDay = await prisma.$queryRaw<{ status: string }[]>`
-        SELECT status
-        FROM service_days
-        WHERE engagement_id = ${engagementId}
-          AND status = 'COMPLETED'
-        LIMIT 1
-      `;
-
-      if (!completedDay.length) {
-        return res.status(400).json({
-          success: false,
-          reason: "SERVICE_NOT_COMPLETED",
-        });
-      }
-    } else if (engagement.active === true) {
+    if (!(await isEngagementCompletedForReview(engagement, engagementId))) {
       return res.status(400).json({
         success: false,
-        reason: "ENGAGEMENT_NOT_COMPLETED",
+        reason:
+          String(engagement.booking_type || "").toUpperCase() === "ON_DEMAND"
+            ? "SERVICE_NOT_COMPLETED"
+            : "ENGAGEMENT_NOT_COMPLETED",
       });
     }
 
